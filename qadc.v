@@ -9,7 +9,7 @@ module qadc(
 	output reg  MOSI,
 	input  		MISO	
 );
-	localparam[4:0]   NUM_OF_BITS	 = 5'd16;
+	localparam[4:0]   NUM_OF_BITS	 = 5'd15;
 	
 	localparam[1:0]   IDLE 			 = 2'd0;
 	localparam[1:0]   ADR_DATA_PHASE = 2'd1;
@@ -18,8 +18,8 @@ module qadc(
 	reg[1:0] 		  ADC_STATE = IDLE;
 	reg[4:0] 		  BitCounter;
 	
-	reg[15:0] TxmtData = 16'd1234;	// ctrl bit , addrb bits , data bits 
-	reg[15:0] RxData ;
+	reg[15:0] TxmtData = 16'hA4D2;	// ctrl bit , addrb bits , data bits 
+	reg[7:0]  RxData ;
 	
 	always@(posedge CLK)
 	begin 
@@ -33,7 +33,8 @@ module qadc(
 			case(ADC_STATE)
 				IDLE : begin
 							CS	 		<= 1'b0;
-							BitCounter	<= NUM_OF_BITS;							
+							BitCounter	<= NUM_OF_BITS;	
+							MOSI 	    <= TxmtData[NUM_OF_BITS];						
 							ADC_STATE	<= ADR_DATA_PHASE;
 					   end 
 	  ADR_DATA_PHASE : begin
@@ -41,12 +42,9 @@ module qadc(
 							// Rising Edge 
 							if(!SCLK)
 							begin
-							    if(BitCounter > 5'd7)
+							    if(BitCounter < 5'd8)
 							    begin 
 								    RxData[BitCounter] <= MISO;
-								end 
-								else begin 
-								    RxData[BitCounter] <= 0;
 								end 
 							end
 							else begin
@@ -64,7 +62,8 @@ module qadc(
 				DONE : begin
 							CS	 		<= 1'b1;
 							SCLK 		<= 1'b0;
-							ADC_STATE	<= IDLE;
+							ADC_STATE	<= DONE;
+//							ADC_STATE	<= IDLE;
 				       end
 				default : ; 
 			endcase
@@ -72,6 +71,7 @@ module qadc(
 	end
 
 endmodule
+
 
 module mainTB;
 reg CLK;
@@ -93,7 +93,7 @@ qadc dut (
 );
 
 // ADC response data
-reg [15:0] adc_tx_data;
+reg [7:0] adc_tx_data;
 integer bit_ptr;
 
 // 48 MHz clock
@@ -108,7 +108,7 @@ initial
 begin
     Resetn = 0;
     MISO   = 0;
-    adc_tx_data = 16'hABCDEF;
+    adc_tx_data = 8'hD2;
 
     #100;
     Resetn = 1;
@@ -117,7 +117,7 @@ end
 // Initialize transfer
 always @(negedge CS)
 begin
-    bit_ptr = 16;
+    bit_ptr = 7;
     $display("\n--- SPI Transfer Started ---");
 end
 
@@ -126,8 +126,11 @@ always @(negedge SCLK)
 begin
     if(!CS)
     begin
-        if(bit_ptr >= 0)
-            MISO <= adc_tx_data[bit_ptr];
+//        if(bit_ptr >= 0)
+        if(dut.BitCounter <= 7)        
+            MISO <= adc_tx_data[dut.BitCounter];           
+        else 
+            MISO <= 0;        
     end
 end
 
